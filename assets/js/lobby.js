@@ -132,6 +132,12 @@ document.querySelectorAll(".lobby-branch-btn").forEach(btn=>{
   const tryPlay = ()=>{ const p = video.play(); if(p && p.catch) p.catch(()=>{}); };
   tryPlay();
 
+  // Only start the slow zoom/drift once playback is genuinely smooth —
+  // kicking it off immediately would fight the video's own first-frame
+  // decode and show up as a little stutter right at the start.
+  video.addEventListener("playing", ()=> video.classList.add("is-playing"));
+  video.addEventListener("waiting", ()=> video.classList.remove("is-playing"));
+
   // Loop is handled natively via the `loop` attribute for a seamless replay,
   // no JS timing needed — keeps playback smooth with zero extra work.
 

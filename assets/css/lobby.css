@@ -239,8 +239,10 @@
     object-fit:cover; object-position:center;
     filter:brightness(0.5) saturate(0.85);
     transform:scale(1.06);
-    animation:lobbyBgDrift 22s ease-in-out infinite alternate;
     background:#0B0A08; /* shows while the poster/first frame paints */
+  }
+  #lobby .lobby-bg-video.is-playing{
+    animation:lobbyBgDrift 22s ease-in-out infinite alternate;
   }
   @keyframes lobbyBgDrift{
     from{ transform:scale(1.06) translateY(0); }
