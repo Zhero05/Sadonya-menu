@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+
+<html dir="ltr" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1" name="viewport"/>
+<title>Sadonya — Choose Branch</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&amp;family=Manrope:wght@400;500;600;700;800&amp;family=Cairo:wght@400;500;600;700;800&amp;family=Noto+Kufi+Arabic:wght@400;500;600;700;800&amp;family=Noto+Sans+Arabic:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<link href="/assets/css/lobby.css" rel="stylesheet"/></head>
+<body>
+<div id="loading">Loading Sadonya Cafe…</div>
+<!-- ============ WAITING LOBBY (index1) ============ -->
+<!-- ============ WAITING LOBBY ============ -->
+<div id="lobby" style="display:none;">
+<div class="lobby-bg">
+<video class="lobby-bg-video" id="lobbyBgVideo" autoplay muted loop playsinline disablepictureinpicture preload="auto" poster="/assets/images/lobby-bg-poster.jpg">
+<source src="/assets/video/lobby-bg.webm" type="video/webm"/>
+<source src="/assets/video/lobby-bg.mp4" type="video/mp4"/>
+</video>
+</div>
+<div class="lobby-shade"></div>
+<div class="lobby-langs" id="lobbyLangs"></div>
+<div class="lobby-inner">
+<h1 class="lobby-name" id="lobbyName">Sadonya</h1>
+<div class="lobby-tag" id="lobbyTag">Coffee • Food • Desserts</div>
+<div class="lobby-branch-btns" id="lobbyBranchBtns">
+<button class="lobby-branch-btn" data-branch="sadonya" data-target="/menu">
+<span class="branch-label">Sadonya</span>
+</button>
+<div class="lobby-divider" id="lobbyDivider">or</div>
+<button class="lobby-branch-btn plus" data-branch="plus" data-target="/plus">
+<span class="branch-label">Sadonya Plus</span>
+</button>
+</div>
+<div class="lobby-credit">Developed by <span>Zhero Aree</span></div>
+</div>
+</div>
+
+<script defer="" src="/assets/js/lobby.js"></script></body>
+</html>

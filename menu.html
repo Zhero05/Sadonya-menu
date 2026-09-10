@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+
+<html dir="ltr" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1" name="viewport"/>
+<title>Sadonya Digital Menu</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&amp;family=Manrope:wght@400;500;600;700;800&amp;family=Cairo:wght@400;500;600;700;800&amp;family=Noto+Kufi+Arabic:wght@400;500;600;700;800&amp;family=Noto+Sans+Arabic:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<link href="/assets/css/menu.css" rel="stylesheet"/></head>
+<body data-branch="cafe">
+<div id="loading">Loading menu…</div>
+<!-- ============ CUSTOMER VIEW (index2) ============ -->
+<!-- ============ CUSTOMER VIEW ============ -->
+<div id="customerView" style="display:none;">
+<div id="bgOverlay"></div>
+<header class="site-header">
+<a class="menu-back-btn" href="/index.html" id="backToLobbyBtn"><span aria-hidden="true">←</span><span id="backToLobbyText">Back</span></a>
+<div class="lang-switch" id="langSwitch"></div>
+<div class="logo-wrap" id="logoWrap">
+<svg fill="none" stroke="#141210" stroke-width="1.6" viewbox="0 0 24 24"><path d="M4 8h13a3 3 0 0 1 0 6h-1M4 8v6a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4V8M4 8V6M9 3v2M13 3v2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</div>
+<h1 class="cafe-name" id="cafeNameEl">Sadonya</h1>
+<p class="cafe-desc" id="cafeDescEl">Coffee • Food • Desserts</p>
+</header>
+<div class="search-wrap">
+<div class="search-box">
+<svg class="search-icon" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.2-3.2" stroke-linecap="round"></path></svg>
+<input autocomplete="off" id="searchInput" spellcheck="false" type="search"/>
+<button aria-label="Clear" id="searchClear" style="display:none;" type="button">
+<svg fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"></path></svg>
+</button>
+</div>
+</div>
+<div class="cat-nav-wrap">
+<nav class="cat-nav" id="catNav"></nav>
+</div>
+<main class="menu-wrap" id="menuSections"></main>
+<footer class="site-footer">
+<div id="footerContact"></div>
+<div class="hours-card" id="footerHoursCard" style="display:none;"><div class="hours-title"><span id="hoursClock"></span><span id="hoursTitleTxt"></span></div><div class="hours-body" id="hoursBody"></div></div>
+<div class="map-wrap" id="footerMap"></div>
+<div class="footer-scan" id="footerScan">Scan the QR code at your table to view this menu</div>
+<a class="admin-link" href="#admin">Staff Portal</a>
+</footer>
+<button aria-label="Back to top" class="back-to-top-btn" id="backToTopBtn" title="Back to top" type="button"><svg fill="none" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.2" viewbox="0 0 24 24"><path d="M12 20V4M5 11l7-7 7 7"></path></svg></button>
+</div>
+<!-- ============ ADMIN VIEW ============ -->
+<!-- ============ ADMIN VIEW ============ -->
+<div id="adminView">
+<div class="admin-login" id="adminLogin">
+<div class="login-card">
+<h2>Admin Login</h2>
+<p>Sign in to manage the Sadonya Cafe menu.</p>
+<div class="field" style="text-align:left;">
+<label>Email</label>
+<input id="adminEmailInput" placeholder="you@example.com" type="email"/>
+</div>
+<div class="field" style="text-align:left;">
+<label>Password</label>
+<input id="adminPassInput" placeholder="Enter admin password" type="password"/>
+</div>
+<button class="btn btn-primary" id="adminLoginBtn">Sign In</button>
+<div class="error-text" id="loginError" style="display:none;">Incorrect password. Try again.</div>
+<p style="margin-top:16px;"><a href="#" id="backToMenuLink" style="font-size:12px;color:var(--text-muted);">← Back to menu</a></p>
+</div>
+</div>
+<div class="admin-shell" id="adminDashboard" style="display:none;">
+<div class="admin-topbar">
+<h1>Sadonya Cafe — Admin</h1>
+<div style="display:flex;gap:8px;">
+<a class="btn btn-outline btn-sm" href="#menu">View Menu</a>
+<button class="btn btn-outline btn-sm" id="logoutBtn">Log Out</button>
+</div>
+</div>
+<div class="note-box">Admin access is protected by Supabase Auth. Create one staff account in your Supabase project and use that email/password here.</div>
+<div class="tabs" id="adminTabs">
+<button class="tab-btn active" data-tab="items">Menu Items</button>
+<button class="tab-btn" data-tab="categories">Categories</button>
+<button class="tab-btn" data-tab="settings">Café Settings</button>
+<button class="tab-btn" data-tab="qr">QR Code</button>
+</div>
+<div id="tabContent"></div>
+</div>
+</div>
+
+<script src="/assets/js/config-cafe.js"></script><script defer="" src="/assets/js/menu-app.js"></script></body>
+</html>
