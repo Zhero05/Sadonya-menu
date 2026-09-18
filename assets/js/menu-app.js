@@ -499,6 +499,34 @@ function renderCustomer(){
   const lang = state.lang;
   const s = state.settings;
  
+  // Persistent customer feedback action beneath Back, matching the menu's gold controls.
+  // Both buttons live in a shared flex column so the gap between them stays
+  // consistent no matter how long the translated "Back" label is.
+  let feedbackBtn = document.getElementById("openFeedbackBtn");
+  if (!feedbackBtn) {
+    const header = document.querySelector(".site-header");
+    const backBtnEl = document.getElementById("backToLobbyBtn");
+    let actions = header.querySelector(".header-actions");
+    if (!actions) {
+      actions = document.createElement("div");
+      actions.className = "header-actions";
+      if (backBtnEl) {
+        backBtnEl.parentNode.insertBefore(actions, backBtnEl);
+        actions.appendChild(backBtnEl);
+      } else {
+        header.appendChild(actions);
+      }
+    }
+    feedbackBtn = document.createElement("button");
+    feedbackBtn.id = "openFeedbackBtn"; feedbackBtn.type = "button";
+    feedbackBtn.className = "menu-feedback-btn";
+    feedbackBtn.innerHTML = '<span aria-hidden="true">★</span><span id="feedbackButtonText">Feedback</span>';
+    actions.appendChild(feedbackBtn);
+    feedbackBtn.addEventListener("click", openFeedbackForm);
+  }
+  const feedbackText = document.getElementById("feedbackButtonText");
+  if (feedbackText) feedbackText.textContent = ({en:"Feedback",ku:"ڕەخنە و پێشنیار",ar:"ملاحظاتك"})[lang] || "Feedback";
+
   // header
   document.getElementById("cafeNameEl").textContent = s.name || (APP_CONFIG.defaultName || "Sadonya Cafe");
   document.getElementById("cafeDescEl").textContent = tr(s.description, lang);
@@ -684,6 +712,7 @@ function renderAdminTabs(){
   else if(state.adminTab === "categories") renderCategoriesTab(el);
   else if(state.adminTab === "settings") renderSettingsTab(el);
   else if(state.adminTab === "qr") renderQrTab(el);
+  else if(state.adminTab === "feedback") renderFeedbackTab(el);
 }
  
 /* ---------------- CATEGORIES TAB ---------------- */
@@ -1087,6 +1116,49 @@ function setupBackToTop(){
   update();
   window.addEventListener("scroll", update, {passive:true});
   btn.onclick = ()=> window.scrollTo({top:0, behavior:"smooth"});
+}
+
+/* ============================================================
+   CUSTOMER FEEDBACK + ADMIN INBOX
+============================================================ */
+function ensureFeedbackModal(){
+  if(document.getElementById("feedbackModal")) return;
+  const modal=document.createElement("div"); modal.id="feedbackModal"; modal.className="feedback-modal"; modal.hidden=true;
+  modal.innerHTML=`<div class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+    <button type="button" class="feedback-close" id="feedbackClose" aria-label="Close">×</button>
+    <h2 id="feedbackTitle">Send us your feedback</h2><p class="feedback-subtitle">How was your experience?</p>
+    <form id="feedbackForm"><div class="feedback-stars" role="radiogroup" aria-label="Rating">
+      ${[1,2,3,4,5].map(n=>`<button type="button" class="feedback-star" data-rating="${n}" role="radio" aria-checked="false" aria-label="${n} star${n>1?'s':''}">★</button>`).join("")}
+    </div><input type="hidden" id="feedbackRating" value="">
+    <label for="feedbackMessage">Your message*</label><textarea id="feedbackMessage" required maxlength="2000" placeholder="Write your message here..."></textarea>
+    <div class="feedback-fields"><div><label for="feedbackName">Name</label><input id="feedbackName" maxlength="120" autocomplete="name"></div><div><label for="feedbackEmail">Email</label><input id="feedbackEmail" type="email" maxlength="254" autocomplete="email"></div></div>
+    <p id="feedbackStatus" role="status" class="feedback-status"></p><button class="feedback-submit" type="submit">Submit</button></form></div>`;
+  document.body.appendChild(modal);
+  document.getElementById("feedbackClose").onclick=()=>modal.hidden=true;
+  modal.addEventListener("click",e=>{if(e.target===modal) modal.hidden=true;});
+  modal.querySelectorAll(".feedback-star").forEach(btn=>btn.onclick=()=>{document.getElementById("feedbackRating").value=btn.dataset.rating;modal.querySelectorAll(".feedback-star").forEach(b=>{b.classList.toggle("selected",Number(b.dataset.rating)<=Number(btn.dataset.rating));b.setAttribute("aria-checked",String(b===btn));});});
+  document.getElementById("feedbackForm").addEventListener("submit",submitFeedback);
+}
+function openFeedbackForm(){ensureFeedbackModal();const m=document.getElementById("feedbackModal");m.hidden=false;document.getElementById("feedbackStatus").textContent="";}
+async function submitFeedback(e){
+  e.preventDefault(); const rating=Number(document.getElementById("feedbackRating").value); const message=document.getElementById("feedbackMessage").value.trim();
+  const status=document.getElementById("feedbackStatus");
+  if(!rating){status.textContent="Please choose a star rating.";return;} if(!message){status.textContent="Please write a message.";return;}
+  if(!supabaseClient){status.textContent="Feedback is unavailable right now. Please try again later.";return;}
+  const btn=e.currentTarget.querySelector(".feedback-submit");btn.disabled=true;status.textContent="Sending…";
+  const {error}=await supabaseClient.from("customer_feedback").insert({branch_key:MENU_ID,rating,message,name:document.getElementById("feedbackName").value.trim()||null,email:document.getElementById("feedbackEmail").value.trim()||null});
+  btn.disabled=false;
+  if(error){console.error(error);status.textContent="Could not send feedback. Please try again.";return;}
+  status.textContent="Thank you! Your feedback has been sent.";document.getElementById("feedbackForm").reset();document.getElementById("feedbackRating").value="";document.querySelectorAll(".feedback-star").forEach(b=>b.classList.remove("selected"));
+}
+async function renderFeedbackTab(el){
+  el.innerHTML='<div class="admin-card">Loading feedback…</div>';
+  if(!supabaseClient){el.innerHTML='<div class="admin-card">Supabase is not configured.</div>';return;}
+  const {data,error}=await supabaseClient.from("customer_feedback").select("id,rating,message,name,email,created_at").eq("branch_key",MENU_ID).order("created_at",{ascending:false}).limit(300);
+  if(error){console.error(error);el.innerHTML='<div class="admin-card">Could not load feedback. Check the feedback SQL migration and admin access policies.</div>';return;}
+  const rows=data||[];const avg=rows.length?(rows.reduce((sum,r)=>sum+r.rating,0)/rows.length).toFixed(1):"—";
+  el.innerHTML=`<div class="admin-card"><strong>${rows.length} feedback entries</strong> · Average rating: <strong>${avg} / 5 ★</strong></div>${rows.length?rows.map(r=>`<article class="admin-card feedback-entry"><div class="feedback-entry-head"><strong>${"★".repeat(r.rating)}${"☆".repeat(5-r.rating)}</strong><time>${new Date(r.created_at).toLocaleString()}</time></div><p>${escapeHtml(r.message)}</p><small>${escapeHtml(r.name||"Anonymous")}${r.email?" · "+escapeHtml(r.email):""}</small><button class="btn btn-outline btn-sm feedback-delete" data-feedback-id="${r.id}">Delete</button></article>`).join(""):'<div class="admin-card">No feedback yet.</div>'}`;
+  el.querySelectorAll(".feedback-delete").forEach(btn=>btn.onclick=async()=>{if(!confirm("Delete this feedback?"))return;const {error}=await supabaseClient.from("customer_feedback").delete().eq("id",btn.dataset.feedbackId).eq("branch_key",MENU_ID);if(error){alert("Could not delete feedback.");return;}renderFeedbackTab(el);});
 }
 
 /* ============================================================
