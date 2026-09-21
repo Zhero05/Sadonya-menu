@@ -313,3 +313,8 @@
   .feedback-delete{float:right}
   @media(max-width:420px){.header-actions{gap:8px}.menu-feedback-btn{padding:7px 11px;font-size:11px}.feedback-dialog{padding:22px 18px}.feedback-fields{grid-template-columns:1fr}.feedback-star{font-size:31px}}
 
+
+/* Feedback dialog: right-to-left layout for Kurdish and Arabic */
+.feedback-modal[dir="rtl"] .feedback-close{right:auto;left:15px}
+.feedback-modal[dir="rtl"] .feedback-dialog h2{margin:0 0 8px 32px}
+.feedback-modal[dir="rtl"] input[type="email"]{direction:ltr;text-align:left}

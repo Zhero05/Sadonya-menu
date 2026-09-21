@@ -761,6 +761,19 @@ function renderCategoriesTab(el){
 function swapOrder(list, item, dir, persistFn, rerenderFn){
   const sameCat = item.categoryId !== undefined;
   let sorted = [...list].sort((a,b)=>(a.order||0)-(b.order||0));
+
+  // Categories: move by position and renumber 1..N. This keeps the buttons working
+  // even if saved order numbers contain duplicates or gaps (e.g. after a delete).
+  if(!sameCat){
+    const idx = sorted.findIndex(x=>x.id===item.id);
+    const swapIdx = idx + dir;
+    if(idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return;
+    [sorted[idx], sorted[swapIdx]] = [sorted[swapIdx], sorted[idx]];
+    sorted.forEach((x,i)=>{ x.order = i + 1; });
+    persistFn(); rerenderFn();
+    return;
+  }
+
   if(sameCat) sorted = sorted.filter(x=>x.categoryId === item.categoryId);
   const idx = sorted.findIndex(x=>x.id===item.id);
   const swapIdx = idx + dir;
@@ -773,7 +786,7 @@ function swapOrder(list, item, dir, persistFn, rerenderFn){
  
 function openCategoryModal(cat){
   const isNew = !cat;
-  const draft = cat ? JSON.parse(JSON.stringify(cat)) : { id: uid("cat"), name:{en:"",ku:"",ar:""}, order: state.categories.length+1, hidden:false };
+  const draft = cat ? JSON.parse(JSON.stringify(cat)) : { id: uid("cat"), name:{en:"",ku:"",ar:""}, order: Math.max(0, ...state.categories.map(c=>Number(c.order)||0)) + 1, hidden:false };
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
@@ -1121,35 +1134,94 @@ function setupBackToTop(){
 /* ============================================================
    CUSTOMER FEEDBACK + ADMIN INBOX
 ============================================================ */
+const FEEDBACK_TEXT = {
+  en:{
+    title:"Send us your feedback", subtitle:"How was your experience?",
+    message:"Your message*", messagePh:"Write your message here...",
+    name:"Name", email:"Email", submit:"Submit", close:"Close", rating:"Rating",
+    needRating:"Please choose a star rating.", needMessage:"Please write a message.",
+    badEmail:"Please enter a valid email address.",
+    unavailable:"Feedback is unavailable right now. Please try again later.",
+    sending:"Sending\u2026", error:"Could not send feedback. Please try again.",
+    success:"Thank you! Your feedback has been sent."
+  },
+  ku:{
+    title:"ڕاوبۆچوونەکەت بۆ ئێمە بنێرە", subtitle:"ئەزموونەکەت چۆن بوو؟",
+    message:"پەیامەکەت*", messagePh:"پەیامەکەت لێرە بنووسە...",
+    name:"ناو", email:"ئیمەیڵ", submit:"ناردن", close:"داخستن", rating:"هەڵسەنگاندن",
+    needRating:"تکایە ڕێژەی ئەستێرەکان هەڵبژێرە.", needMessage:"تکایە پەیامێک بنووسە.",
+    badEmail:"تکایە ئیمەیڵێکی دروست بنووسە.",
+    unavailable:"ناردنی ڕاوبۆچوون لە ئێستادا بەردەست نییە. تکایە دواتر هەوڵبدەرەوە.",
+    sending:"دەنێردرێت\u2026", error:"نەتوانرا ڕاوبۆچوونەکە بنێردرێت. تکایە دووبارە هەوڵبدەرەوە.",
+    success:"سوپاس! ڕاوبۆچوونەکەت نێردرا."
+  },
+  ar:{
+    title:"شاركنا رأيك", subtitle:"كيف كانت تجربتك؟",
+    message:"رسالتك*", messagePh:"اكتب رسالتك هنا...",
+    name:"الاسم", email:"البريد الإلكتروني", submit:"إرسال", close:"إغلاق", rating:"التقييم",
+    needRating:"يرجى اختيار تقييم بالنجوم.", needMessage:"يرجى كتابة رسالة.",
+    badEmail:"يرجى إدخال بريد إلكتروني صحيح.",
+    unavailable:"خدمة الملاحظات غير متاحة حاليًا. يرجى المحاولة لاحقًا.",
+    sending:"جارٍ الإرسال\u2026", error:"تعذر إرسال ملاحظاتك. يرجى المحاولة مرة أخرى.",
+    success:"شكرًا لك! تم إرسال ملاحظاتك."
+  }
+};
+function fbT(key){
+  const l = FEEDBACK_TEXT[state.lang] ? state.lang : "en";
+  return FEEDBACK_TEXT[l][key];
+}
+// Re-writes every visible string in the feedback dialog in the customer's current language.
+function applyFeedbackLanguage(){
+  const modal = document.getElementById("feedbackModal");
+  if(!modal) return;
+  modal.lang = state.lang;
+  modal.dir = (state.lang === "en") ? "ltr" : "rtl";
+  const text = (id,key)=>{ const el=document.getElementById(id); if(el) el.textContent = fbT(key); };
+  text("feedbackTitle","title"); text("feedbackSubtitle","subtitle");
+  text("feedbackMessageLabel","message"); text("feedbackNameLabel","name");
+  text("feedbackEmailLabel","email"); text("feedbackSubmit","submit");
+  document.getElementById("feedbackMessage").placeholder = fbT("messagePh");
+  document.getElementById("feedbackClose").setAttribute("aria-label", fbT("close"));
+  modal.querySelector(".feedback-stars").setAttribute("aria-label", fbT("rating"));
+}
 function ensureFeedbackModal(){
   if(document.getElementById("feedbackModal")) return;
   const modal=document.createElement("div"); modal.id="feedbackModal"; modal.className="feedback-modal"; modal.hidden=true;
   modal.innerHTML=`<div class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
-    <button type="button" class="feedback-close" id="feedbackClose" aria-label="Close">×</button>
-    <h2 id="feedbackTitle">Send us your feedback</h2><p class="feedback-subtitle">How was your experience?</p>
-    <form id="feedbackForm"><div class="feedback-stars" role="radiogroup" aria-label="Rating">
-      ${[1,2,3,4,5].map(n=>`<button type="button" class="feedback-star" data-rating="${n}" role="radio" aria-checked="false" aria-label="${n} star${n>1?'s':''}">★</button>`).join("")}
+    <button type="button" class="feedback-close" id="feedbackClose" aria-label="Close">\u00d7</button>
+    <h2 id="feedbackTitle"></h2><p class="feedback-subtitle" id="feedbackSubtitle"></p>
+    <form id="feedbackForm" novalidate><div class="feedback-stars" role="radiogroup" aria-label="Rating">
+      ${[1,2,3,4,5].map(n=>`<button type="button" class="feedback-star" data-rating="${n}" role="radio" aria-checked="false" aria-label="${n} / 5">\u2605</button>`).join("")}
     </div><input type="hidden" id="feedbackRating" value="">
-    <label for="feedbackMessage">Your message*</label><textarea id="feedbackMessage" required maxlength="2000" placeholder="Write your message here..."></textarea>
-    <div class="feedback-fields"><div><label for="feedbackName">Name</label><input id="feedbackName" maxlength="120" autocomplete="name"></div><div><label for="feedbackEmail">Email</label><input id="feedbackEmail" type="email" maxlength="254" autocomplete="email"></div></div>
-    <p id="feedbackStatus" role="status" class="feedback-status"></p><button class="feedback-submit" type="submit">Submit</button></form></div>`;
+    <label for="feedbackMessage" id="feedbackMessageLabel"></label><textarea id="feedbackMessage" maxlength="2000"></textarea>
+    <div class="feedback-fields"><div><label for="feedbackName" id="feedbackNameLabel"></label><input id="feedbackName" maxlength="120" autocomplete="name"></div><div><label for="feedbackEmail" id="feedbackEmailLabel"></label><input id="feedbackEmail" type="email" maxlength="254" autocomplete="email" dir="ltr"></div></div>
+    <p id="feedbackStatus" role="status" class="feedback-status"></p><button class="feedback-submit" id="feedbackSubmit" type="submit"></button></form></div>`;
   document.body.appendChild(modal);
   document.getElementById("feedbackClose").onclick=()=>modal.hidden=true;
   modal.addEventListener("click",e=>{if(e.target===modal) modal.hidden=true;});
   modal.querySelectorAll(".feedback-star").forEach(btn=>btn.onclick=()=>{document.getElementById("feedbackRating").value=btn.dataset.rating;modal.querySelectorAll(".feedback-star").forEach(b=>{b.classList.toggle("selected",Number(b.dataset.rating)<=Number(btn.dataset.rating));b.setAttribute("aria-checked",String(b===btn));});});
   document.getElementById("feedbackForm").addEventListener("submit",submitFeedback);
+  applyFeedbackLanguage();
 }
-function openFeedbackForm(){ensureFeedbackModal();const m=document.getElementById("feedbackModal");m.hidden=false;document.getElementById("feedbackStatus").textContent="";}
+function openFeedbackForm(){
+  ensureFeedbackModal();
+  applyFeedbackLanguage(); // pick up whatever language the customer is using right now
+  const m=document.getElementById("feedbackModal");
+  m.hidden=false;
+  document.getElementById("feedbackStatus").textContent="";
+}
 async function submitFeedback(e){
   e.preventDefault(); const rating=Number(document.getElementById("feedbackRating").value); const message=document.getElementById("feedbackMessage").value.trim();
+  const email=document.getElementById("feedbackEmail").value.trim();
   const status=document.getElementById("feedbackStatus");
-  if(!rating){status.textContent="Please choose a star rating.";return;} if(!message){status.textContent="Please write a message.";return;}
-  if(!supabaseClient){status.textContent="Feedback is unavailable right now. Please try again later.";return;}
-  const btn=e.currentTarget.querySelector(".feedback-submit");btn.disabled=true;status.textContent="Sending…";
-  const {error}=await supabaseClient.from("customer_feedback").insert({branch_key:MENU_ID,rating,message,name:document.getElementById("feedbackName").value.trim()||null,email:document.getElementById("feedbackEmail").value.trim()||null});
+  if(!rating){status.textContent=fbT("needRating");return;} if(!message){status.textContent=fbT("needMessage");return;}
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){status.textContent=fbT("badEmail");return;}
+  if(!supabaseClient){status.textContent=fbT("unavailable");return;}
+  const btn=e.currentTarget.querySelector(".feedback-submit");btn.disabled=true;status.textContent=fbT("sending");
+  const {error}=await supabaseClient.from("customer_feedback").insert({branch_key:MENU_ID,rating,message,name:document.getElementById("feedbackName").value.trim()||null,email:email||null});
   btn.disabled=false;
-  if(error){console.error(error);status.textContent="Could not send feedback. Please try again.";return;}
-  status.textContent="Thank you! Your feedback has been sent.";document.getElementById("feedbackForm").reset();document.getElementById("feedbackRating").value="";document.querySelectorAll(".feedback-star").forEach(b=>b.classList.remove("selected"));
+  if(error){console.error(error);status.textContent=fbT("error");return;}
+  status.textContent=fbT("success");document.getElementById("feedbackForm").reset();document.getElementById("feedbackRating").value="";document.querySelectorAll(".feedback-star").forEach(b=>{b.classList.remove("selected");b.setAttribute("aria-checked","false");});
 }
 async function renderFeedbackTab(el){
   el.innerHTML='<div class="admin-card">Loading feedback…</div>';
