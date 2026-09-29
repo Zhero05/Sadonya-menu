@@ -7,5 +7,6 @@ window.SADONYA_CONFIG = {
   "settingsTable": "sadonya_cafe_settings",
   "categoriesTable": "sadonya_cafe_categories",
   "itemsTable": "sadonya_cafe_items",
+  "imageApi": "https://sadonya-images.zherorastgo.workers.dev",
   "publicUrl": "https://sadonya-cafe.netlify.app/menu"
 };

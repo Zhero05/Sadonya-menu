@@ -13,6 +13,8 @@ const supabaseClient = (SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY)
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 const MENU_ID = APP_CONFIG.menuId || "sadonya-cafe";
 const STORAGE_BUCKET = APP_CONFIG.storageBucket || "sadonya-images";
+/* Cloudflare Worker + R2 image service. Empty = fall back to Supabase Storage. */
+const IMAGE_API = /^https:\/\//.test(String(APP_CONFIG.imageApi || "")) ? String(APP_CONFIG.imageApi).replace(/\/+$/, "") : "";
 const SETTINGS_TABLE = APP_CONFIG.settingsTable || "sadonya_cafe_settings";
 const CATEGORIES_TABLE = APP_CONFIG.categoriesTable || "sadonya_cafe_categories";
 const ITEMS_TABLE = APP_CONFIG.itemsTable || "sadonya_cafe_items";
@@ -285,12 +287,31 @@ async function uploadDataUrl(dataUrl, folder, filename){
   if(!supabaseClient || !dataUrl || !dataUrl.startsWith("data:")) return dataUrl;
   const res = await fetch(dataUrl);
   const blob = await res.blob();
+
+  // Preferred path: Cloudflare R2 through the image Worker (no Supabase egress).
+  if(IMAGE_API){
+    const { data:{ session } } = await supabaseClient.auth.getSession();
+    if(!session) throw new Error("Please log in again.");
+    const safe = String(filename).replace(/[^A-Za-z0-9._-]/g, "_");
+    const r = await fetch(`${IMAGE_API}/upload/${MENU_ID}/${folder}/${safe}.jpg`, {
+      method:"PUT",
+      headers:{ Authorization:`Bearer ${session.access_token}`, "Content-Type":"image/jpeg" },
+      body:blob
+    });
+    if(!r.ok){
+      let msg = ""; try{ msg = (await r.json()).error; }catch(e){}
+      throw new Error(msg || ("Image upload failed (" + r.status + ")"));
+    }
+    return (await r.json()).url;
+  }
+
+  // Fallback: Supabase Storage (old behaviour).
   const path = `${folder}/${filename}.jpg`;
   const { error } = await supabaseClient.storage.from(STORAGE_BUCKET).upload(path, blob, {
     contentType:"image/jpeg", upsert:true, cacheControl:"31536000"
   });
   if(error) throw error;
-    const { data } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+  const { data } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(path);
   return `${data.publicUrl}?v=${Date.now()}`;
 }
 
@@ -367,6 +388,75 @@ function resizeImage(file, maxSize = 1200, quality = 0.78){
   });
 }
  
+/* Menu cards show images at 4:3 and never larger than ~400 CSS px, so a 640x480
+   JPEG is plenty (about 25-50 KB instead of 150-250 KB). This is the main
+   lever for keeping Supabase cached egress under the free-plan quota. */
+const MENU_IMG_W = 640, MENU_IMG_H = 480, MENU_IMG_QUALITY = 0.7;
+async function menuImageFromBlob(blob){
+  const bmp = await createImageBitmap(blob);
+  const target = MENU_IMG_W / MENU_IMG_H;
+  let sw = bmp.width, sh = bmp.height, sx = 0, sy = 0;
+  if(sw / sh > target){ const nw = Math.round(sh * target); sx = Math.round((sw - nw) / 2); sw = nw; }
+  else { const nh = Math.round(sw / target); sy = Math.round((sh - nh) / 2); sh = nh; }
+  const outW = Math.min(MENU_IMG_W, sw), outH = Math.round(outW / target);
+  const canvas = document.createElement("canvas");
+  canvas.width = outW; canvas.height = outH;
+  const ctx = canvas.getContext("2d", {alpha:false});
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, outW, outH);
+  if(bmp.close) bmp.close();
+  return canvas.toDataURL("image/jpeg", MENU_IMG_QUALITY);
+}
+
+function blobToDataUrl(blob){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=> resolve(r.result);
+    r.onerror = ()=> reject(new Error("Could not read image."));
+    r.readAsDataURL(blob);
+  });
+}
+
+/* One-click move of every existing photo (Supabase Storage or embedded) to Cloudflare R2,
+   re-compressing each one on the way. Safe to run again: photos already on Cloudflare are skipped. */
+async function migrateImagesToCloudflare(btn){
+  if(!IMAGE_API){ alert("Cloudflare is not set up yet: add the Worker address as imageApi in config-cafe.js / config-plus.js first."); return; }
+  const items = state.items.filter(i=> i.image && !i.image.startsWith(IMAGE_API));
+  const logo = state.settings && state.settings.logo && !state.settings.logo.startsWith(IMAGE_API) ? state.settings.logo : "";
+  if(!items.length && !logo){ alert("All photos are already on Cloudflare."); return; }
+  if(!confirm(`Move ${items.length} item photo(s)${logo ? " and the logo" : ""} to Cloudflare? Your menu will look the same.`)) return;
+
+  btn.disabled = true;
+  const failed = [];
+  let n = 0;
+  for(const item of items){
+    n++;
+    btn.textContent = `Moving ${n}/${items.length}…`;
+    try{
+      const blob = item.image.startsWith("data:")
+        ? await (await fetch(item.image)).blob()
+        : await (await fetch(item.image.split("?")[0], {cache:"no-store"})).blob();
+      const dataUrl = await menuImageFromBlob(blob);
+      item.image = await uploadDataUrl(dataUrl, "items", item.id);
+    }catch(err){ console.error("move failed for", item.id, err); failed.push(item.id); }
+  }
+  let ok = true;
+  if(items.length) ok = await persistItems();
+  if(logo){
+    try{
+      btn.textContent = "Moving logo…";
+      const blob = logo.startsWith("data:") ? await (await fetch(logo)).blob() : await (await fetch(logo.split("?")[0], {cache:"no-store"})).blob();
+      state.settings.logo = await uploadDataUrl(await blobToDataUrl(blob), "branding", "logo");
+      await persistSettings();
+    }catch(err){ console.error("logo move failed", err); failed.push("logo"); }
+  }
+  btn.disabled = false; btn.textContent = "Move images to Cloudflare";
+  alert(!ok ? "Photos were uploaded but saving the menu failed. Click the button again."
+        : failed.length ? `Done, but ${failed.length} could not be moved (${failed.join(", ")}). Click the button again to retry.`
+        : "Done. All photos are now served from Cloudflare.");
+  renderAdminTabs();
+}
+
 const ICON_CUP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h13a3 3 0 0 1 0 6h-1M4 8v6a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4V8M4 8V6M9 3v2M13 3v2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ICON_STAR = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.6L22 9.6l-5 4.9 1.2 7-6.2-3.6L5.8 21.5 7 14.5l-5-4.9 7.1-1z"/></svg>`;
  
@@ -831,6 +921,7 @@ function renderItemsTab(el){
   el.innerHTML = `
     <div class="toolbar">
       <button class="btn btn-gold btn-sm" id="addItemBtn">+ Add Item</button>
+      <button class="btn btn-sm" id="moveImgBtn" type="button">Move images to Cloudflare</button>
       <select class="cat-filter" id="itemFilter">
         <option value="all">All categories</option>
         ${cats.map(c=>`<option value="${c.id}" ${filterId===c.id?'selected':''}>${escapeHtml(c.name.en)}</option>`).join("")}
@@ -886,6 +977,7 @@ function renderItemsTab(el){
     });
   }
   document.getElementById("addItemBtn").onclick = ()=> openItemModal(null);
+  document.getElementById("moveImgBtn").onclick = (e)=> migrateImagesToCloudflare(e.currentTarget);
   document.getElementById("itemFilter").onchange = drawList;
   drawList();
 }
@@ -964,7 +1056,7 @@ function openItemModal(item){
   overlay.querySelector("#mImgFile").onchange = async (e)=>{
     const file = e.target.files[0];
     if(!file) return;
-    const dataUrl = await resizeImage(file, 900, 0.78);
+    const dataUrl = await menuImageFromBlob(file);
     draft.image = dataUrl;
     overlay.querySelector("#mImgPreview").src = dataUrl;
     overlay.querySelector("#mImgPreview").style.display = "block";

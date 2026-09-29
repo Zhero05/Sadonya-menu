@@ -76,7 +76,7 @@ function renderLobby(){
   const s = state.settings;
   const brandNames = {
     en:{main:"Sadonya", plus:"Sadonya Plus"},
-    ku:{main:"سادۆنیا", plus:"سادۆنیا پلاس"},
+    ku:{main:"سادۆنیا", plus:" سادۆنیا پڵەس"},
     ar:{main:"سادونيا", plus:"سادونيا بلس"}
   };
   document.getElementById("lobbyName").textContent = brandNames[lang].main;
