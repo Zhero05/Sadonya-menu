@@ -339,3 +339,6 @@
   @media (prefers-reduced-motion: reduce){
     #lobby .lobby-bg-video, .lobby-menu-btn{ animation:none; }
   }
+
+  /* Big plus after "Sadonya Plus" on the lobby button */
+  .lobby-branch-btn.plus .branch-label::after{content:"+";display:inline-block;font-size:1.5em;font-weight:800;line-height:0;margin-inline-start:.12em;color:inherit;position:relative;top:.05em;}

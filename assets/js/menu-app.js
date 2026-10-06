@@ -19,10 +19,12 @@ const SETTINGS_TABLE = APP_CONFIG.settingsTable || "sadonya_cafe_settings";
 const CATEGORIES_TABLE = APP_CONFIG.categoriesTable || "sadonya_cafe_categories";
 const ITEMS_TABLE = APP_CONFIG.itemsTable || "sadonya_cafe_items";
  
+const NAME_LIMIT = 28, DESC_LIMIT = 70; // characters before "See more" appears
+
 const UI = {
-  en:{ popular:"Popular", noItems:"No items in this category yet.", hours:"Opening Hours", contact:"Contact", follow:"Follow Us", location:"Location", scan:"Scan the QR code at your table to view this menu", currency:"IQD", lobbyTag:"Coffee • Food • Desserts", lobbyMenu:"Menu", lobbyHint:"Tap the button above to open the menu", search:"Search the menu…", noResults:"No matching items found.", results:"results", back:"Back" },
-  ku:{ popular:"بەناوبانگ", noItems:"هێشتا هیچ شتێک لەم بەشەدا نییە.", hours:"کاتی کارکردن", contact:"پەیوەندی", follow:"شوێنمان بکەون", location:"شوێن", scan:"کۆدی QR لەسەر مێزەکەت سکان بکە بۆ بینینی مینیو", currency:"IQD", lobbyTag:"قاوە • خواردن • شیرینی", lobbyMenu:"مێنیۆ", lobbyHint:"بوتنەکەی سەوەوە داگرە بۆ کراوەكانی مێنیۆ", search:"گەڕان لە مێنیۆدا…", noResults:"هیچ ئەنجامێک نەدۆزرایەوە.", results:"ئەنجام", back:"گەڕانەوە" },
-  ar:{ popular:"الأكثر طلبًا", noItems:"لا توجد عناصر في هذا القسم بعد.", hours:"ساعات العمل", contact:"تواصل معنا", follow:"تابعنا", location:"الموقع", scan:"امسح رمز QR الموجود على طاولتك لعرض القائمة", currency:"IQD", lobbyTag:"قهوة • أطعمة • حلويات", lobbyMenu:"منيو", lobbyHint:"اضغط على الزر لفتح القائمة", search:"ابحث في القائمة…", noResults:"لا توجد نتائج مطابقة.", results:"نتيجة", back:"رجوع" }
+  en:{ popular:"Popular", noItems:"No items in this category yet.", hours:"Opening Hours", contact:"Contact", follow:"Follow Us", location:"Location", scan:"Scan the QR code at your table to view this menu", currency:"IQD", lobbyTag:"Coffee • Food • Desserts", lobbyMenu:"Menu", lobbyHint:"Tap the button above to open the menu", search:"Search the menu…", noResults:"No matching items found.", results:"results", back:"Back", seeMore:"See more", seeLess:"See less" },
+  ku:{ popular:"بەناوبانگ", noItems:"هێشتا هیچ شتێک لەم بەشەدا نییە.", hours:"کاتی کارکردن", contact:"پەیوەندی", follow:"شوێنمان بکەون", location:"شوێن", scan:"کۆدی QR لەسەر مێزەکەت سکان بکە بۆ بینینی مینیو", currency:"IQD", lobbyTag:"قاوە • خواردن • شیرینی", lobbyMenu:"مێنیۆ", lobbyHint:"بوتنەکەی سەوەوە داگرە بۆ کراوەكانی مێنیۆ", search:"گەڕان لە مێنیۆدا…", noResults:"هیچ ئەنجامێک نەدۆزرایەوە.", results:"ئەنجام", back:"گەڕانەوە", seeMore:"زیاتر ببینە", seeLess:"کەمتر" },
+  ar:{ popular:"الأكثر طلبًا", noItems:"لا توجد عناصر في هذا القسم بعد.", hours:"ساعات العمل", contact:"تواصل معنا", follow:"تابعنا", location:"الموقع", scan:"امسح رمز QR الموجود على طاولتك لعرض القائمة", currency:"IQD", lobbyTag:"قهوة • أطعمة • حلويات", lobbyMenu:"منيو", lobbyHint:"اضغط على الزر لفتح القائمة", search:"ابحث في القائمة…", noResults:"لا توجد نتائج مطابقة.", results:"نتيجة", back:"رجوع", seeMore:"عرض المزيد", seeLess:"عرض أقل" }
 };
  
 function tr(field, lang){
@@ -417,46 +419,6 @@ function blobToDataUrl(blob){
   });
 }
 
-/* One-click move of every existing photo (Supabase Storage or embedded) to Cloudflare R2,
-   re-compressing each one on the way. Safe to run again: photos already on Cloudflare are skipped. */
-async function migrateImagesToCloudflare(btn){
-  if(!IMAGE_API){ alert("Cloudflare is not set up yet: add the Worker address as imageApi in config-cafe.js / config-plus.js first."); return; }
-  const items = state.items.filter(i=> i.image && !i.image.startsWith(IMAGE_API));
-  const logo = state.settings && state.settings.logo && !state.settings.logo.startsWith(IMAGE_API) ? state.settings.logo : "";
-  if(!items.length && !logo){ alert("All photos are already on Cloudflare."); return; }
-  if(!confirm(`Move ${items.length} item photo(s)${logo ? " and the logo" : ""} to Cloudflare? Your menu will look the same.`)) return;
-
-  btn.disabled = true;
-  const failed = [];
-  let n = 0;
-  for(const item of items){
-    n++;
-    btn.textContent = `Moving ${n}/${items.length}…`;
-    try{
-      const blob = item.image.startsWith("data:")
-        ? await (await fetch(item.image)).blob()
-        : await (await fetch(item.image.split("?")[0], {cache:"no-store"})).blob();
-      const dataUrl = await menuImageFromBlob(blob);
-      item.image = await uploadDataUrl(dataUrl, "items", item.id);
-    }catch(err){ console.error("move failed for", item.id, err); failed.push(item.id); }
-  }
-  let ok = true;
-  if(items.length) ok = await persistItems();
-  if(logo){
-    try{
-      btn.textContent = "Moving logo…";
-      const blob = logo.startsWith("data:") ? await (await fetch(logo)).blob() : await (await fetch(logo.split("?")[0], {cache:"no-store"})).blob();
-      state.settings.logo = await uploadDataUrl(await blobToDataUrl(blob), "branding", "logo");
-      await persistSettings();
-    }catch(err){ console.error("logo move failed", err); failed.push("logo"); }
-  }
-  btn.disabled = false; btn.textContent = "Move images to Cloudflare";
-  alert(!ok ? "Photos were uploaded but saving the menu failed. Click the button again."
-        : failed.length ? `Done, but ${failed.length} could not be moved (${failed.join(", ")}). Click the button again to retry.`
-        : "Done. All photos are now served from Cloudflare.");
-  renderAdminTabs();
-}
-
 const ICON_CUP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 8h13a3 3 0 0 1 0 6h-1M4 8v6a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4V8M4 8V6M9 3v2M13 3v2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ICON_STAR = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.6L22 9.6l-5 4.9 1.2 7-6.2-3.6L5.8 21.5 7 14.5l-5-4.9 7.1-1z"/></svg>`;
  
@@ -687,10 +649,10 @@ function renderCustomer(){
                               : `<div class="item-img-placeholder">${ICON_CUP.replace('currentColor', '#FFC72C')}</div>`}
                 <div class="item-body">
                   <div class="item-top">
-                    <h3 class="item-name">${escapeHtml(tr(item.name, lang))}</h3>
+                    <h3 class="item-name${tr(item.name, lang).length > NAME_LIMIT ? ' is-long' : ''}">${escapeHtml(tr(item.name, lang))}</h3>
                     ${item.popular ? `<span class="badge-popular">${ICON_STAR}${UI[lang].popular}</span>` : ""}
                   </div>
-                  <p class="item-desc">${escapeHtml(tr(item.description, lang))}</p>
+                  <p class="item-desc${tr(item.description, lang).length > DESC_LIMIT ? ' is-long' : ''}">${escapeHtml(tr(item.description, lang))}</p>
                   <div class="item-price">${fmtPrice(item.price)}</div>
                 </div>
               </div>`).join("")}</div>`
@@ -699,6 +661,22 @@ function renderCustomer(){
     `).join("");
   }
  
+  // "See more" for long names / descriptions
+  document.querySelectorAll(".item-body").forEach(body=>{
+    const long = body.querySelectorAll(".is-long");
+    if(!long.length) return;
+    long.forEach(el=> el.classList.add("clamped"));
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "see-more-btn";
+    btn.textContent = UI[lang].seeMore;
+    btn.onclick = ()=>{
+      const open = body.classList.toggle("expanded");
+      btn.textContent = open ? UI[lang].seeLess : UI[lang].seeMore;
+    };
+    const price = body.querySelector(".item-price");
+    body.insertBefore(btn, price);
+  });
+
   // click a pill -> smooth scroll to that section
   document.querySelectorAll(".cat-pill").forEach(btn=>{
     btn.onclick = ()=>{
@@ -921,7 +899,6 @@ function renderItemsTab(el){
   el.innerHTML = `
     <div class="toolbar">
       <button class="btn btn-gold btn-sm" id="addItemBtn">+ Add Item</button>
-      <button class="btn btn-sm" id="moveImgBtn" type="button">Move images to Cloudflare</button>
       <select class="cat-filter" id="itemFilter">
         <option value="all">All categories</option>
         ${cats.map(c=>`<option value="${c.id}" ${filterId===c.id?'selected':''}>${escapeHtml(c.name.en)}</option>`).join("")}
@@ -977,7 +954,6 @@ function renderItemsTab(el){
     });
   }
   document.getElementById("addItemBtn").onclick = ()=> openItemModal(null);
-  document.getElementById("moveImgBtn").onclick = (e)=> migrateImagesToCloudflare(e.currentTarget);
   document.getElementById("itemFilter").onchange = drawList;
   drawList();
 }

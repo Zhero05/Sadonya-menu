@@ -318,3 +318,20 @@
 .feedback-modal[dir="rtl"] .feedback-close{right:auto;left:15px}
 .feedback-modal[dir="rtl"] .feedback-dialog h2{margin:0 0 8px 32px}
 .feedback-modal[dir="rtl"] input[type="email"]{direction:ltr;text-align:left}
+
+  /* Category headings: bigger, black on a gold highlight band */
+  .section-label{display:block;font-size:20px;font-weight:800;letter-spacing:.04em;text-transform:none;color:#000;
+    background:linear-gradient(135deg,var(--gold) 0%,var(--gold-dark) 100%);
+    padding:11px 18px;margin:6px 0 16px;border-radius:12px;box-shadow:0 4px 14px rgba(198,154,40,.28);}
+
+  /* See more */
+  .item-name.clamped, .item-desc.clamped{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;}
+  .item-name.clamped{-webkit-line-clamp:2;}
+  .item-desc.clamped{-webkit-line-clamp:2;}
+  .item-body.expanded .item-name.clamped, .item-body.expanded .item-desc.clamped{display:block;overflow:visible;-webkit-line-clamp:unset;}
+  .see-more-btn{background:none;border:none;padding:0 0 6px;margin:0;color:var(--gold);font:800 12px var(--font-body);cursor:pointer;display:block;}
+  .see-more-btn::before{content:"… ";}
+  .item-body.expanded .see-more-btn::before{content:"";}
+
+  /* Big plus after "Sadonya Plus" in the header */
+  .cafe-name::after{content:"+";font-size:1.35em;font-weight:800;line-height:0;margin-inline-start:.12em;color:inherit;position:relative;top:.04em;}
